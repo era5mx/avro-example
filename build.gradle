@@ -1,0 +1,74 @@
+plugins {
+  id "com.commercehub.gradle.plugin.avro" version "0.3.4"
+}
+
+apply plugin: 'java'
+apply plugin: "com.commercehub.gradle.plugin.avro-base"
+apply plugin: 'eclipse'
+
+//sourceCompatibility = 1.7
+version = '1.0'
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'avro',
+                   'Implementation-Version': version
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+List avro = ['org.apache.avro:avro:1.7.7'
+			 ,'org.apache.avro:avro-mapred:1.7.7'
+			 ,'org.apache.hadoop:hadoop-core:1.1.0']
+
+List commons = ['commons-collections:commons-collections:3.2']
+
+List log4j = ['org.apache.logging.log4j:log4j-api:2.3'
+              ,'org.apache.logging.log4j:log4j-core:2.3'
+              //,'org.apache.logging.log4j:log4j-slf4j-impl:2.3'
+              ]
+
+dependencies {
+    //compile group: 'commons-collections', name: 'commons-collections', version: '3.2'
+    compile commons, avro
+    testCompile group: 'junit', name: 'junit', version: '4.+'
+}
+
+defaultTasks 'clean', 'build'
+
+test {
+    systemProperties 'property': 'value'
+}
+
+uploadArchives {
+    repositories {
+       flatDir {
+           dirs 'repos'
+       }
+    }
+}
+
+task generateAvro(type: com.commercehub.gradle.plugin.avro.GenerateAvroJavaTask, dependsOn:'makePretty') {
+    source("src/main/resources/avro")
+    outputDir = file("dest/java")
+}
+
+task fixPluginAvro (type: Delete, dependsOn:'copyTask') {
+    delete 'dest'
+}
+
+task copyTask (type: Copy, dependsOn:'generateAvro') {
+    from 'dest/java'
+    into 'src/main/java'
+}
+
+task makePretty(type: Delete) {
+  delete 'dest'
+  delete 'src/main/java/avro'
+}
+
+//compileJava.source(generateAvro.outputs)
+
+build.dependsOn fixPluginAvro
