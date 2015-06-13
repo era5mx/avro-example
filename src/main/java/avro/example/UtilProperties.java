@@ -17,7 +17,7 @@ public class UtilProperties {
 	/**
 	 * Path del archivo properties
 	 */
-	private static final String AVRO_PROPERTIES = "C:\\ws\\avro\\avro\\src\\main\\resources\\avro.properties";
+	private static final String AVRO_PROPERTIES = "C:\\ws\\avro\\avro-example2\\src\\main\\resources\\avro.properties";
 
 	/**
 	 *
@@ -42,7 +42,7 @@ public class UtilProperties {
 	    /**Obtenemos los parametros definidos en el archivo*/
 	    String property = propiedades.getProperty(nameProperty);
 
-	    return property;
+	    return property!=null?property:"";
 
 	}
 
