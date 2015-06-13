@@ -17,7 +17,7 @@ public class UtilProperties {
 	/**
 	 * Path del archivo properties
 	 */
-	private static final String AVRO_PROPERTIES = "C:\\ws\\avro\\avro\\src\\main\\resources\\avro.properties";
+	private static final String AVRO_PROPERTIES = "C:\\ws\\avro\\avro-example\\src\\main\\resources\\avro.properties";
 
 	/**
 	 *
