@@ -20,10 +20,12 @@ import org.apache.avro.io.DatumWriter;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.commons.lang.StringUtils;
-
-import com.thoughtworks.xstream.XStream;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import avro.gen.User;
+
+import com.thoughtworks.xstream.XStream;
 
 /**
  * @author alexander
@@ -31,14 +33,17 @@ import avro.gen.User;
  */
 public class Avro {
 
+	private static Logger logger = LogManager.getLogger(Avro.class);
+
 	/** Constante para cargar el path configurado */
 	private static final String PATH_AVRO = "pathAvro";
 	/** Constante para cargar el namefile configurado */
 	private static final String NAME_FILE_AVRO = "nameFileAvro";
 	/** Constante para cargar el path configurado para los XMLs */
 	private static final String RESULT_XML = "pathResultXML";
+
 	/** Multiplicador */
-	//private static int multiplicador = 1000000;
+	private static int limit = 100000;
 	private static int multiplicador = 10;
 
 	/**
@@ -53,52 +58,65 @@ public class Avro {
 	public static void main(String[] args) {
 		Avro avro = new Avro();
 		List<User> listUsers = avro.generateUsers();
+		avro.execute(listUsers);
+		logger.info("Ejecucion completada");
+	}
 
-		//Engordamos la lista a 3 millones de registros
+	/**
+	 * @param listUsers
+	 */
+	private void execute(List<User> listUsers) {
+
+		logger.info("Iniciando la ejecucion con [" + listUsers.size() + "] Users.");
+
+		long tiempoInicio = System.currentTimeMillis();
+
+		// Engordamos la lista
 		do {
-			listUsers.addAll(avro.generateUsers());
+			listUsers.addAll(this.generateUsers());
 			--multiplicador;
 		} while (multiplicador>0);
 
-		//Test generacion del nombre del archivo
-		//System.out.println(UUID.randomUUID().toString().concat(".xml"));
+		// Serializamos los usuarios
+		this.serializing(listUsers);
 
-		//Serializamos los usuarios
-		avro.serializing(listUsers);
+		// Deserializamos los usuarios
+		List<User> listUsersDeserializated = this.deserializing();
 
-		//Deserializamos los usuarios
-		List<User> listUsersDeserializated = avro.deserializing();
-
-
+		// Se itera la lista de Users deserializados
 		for (User user2 : listUsersDeserializated) {
-
-			//Mostramos los usuarios en consola
-			System.out.println(user2);
-
-			//Genera el XML del User
-			avro.generaXML(user2);
-
+			logger.debug(user2);
+			this.generaXML(user2, multiplicador); //Genera el XML del User
 		}
 
+		terminaProceso("execute", tiempoInicio);
+
+		logger.info("Terminada la ejecucion con [" + listUsers.size() + "] Users.");
+
+		// Si el multiplicador no ha alcanzado el limite definido se incrementa en 10 y se repite la ejecucion
+		if(multiplicador<limit) {
+			multiplicador = multiplicador*10;
+			execute(listUsers);
+		}
 	}
 
 	/**
 	 * @param user
 	 */
-	private void generaXML(User user) {
+	private void generaXML(User user, int multiplicador) {
 
 		XStream xs = new XStream();
 
 		// OBJECT --> XML
 		String xml = xs.toXML(user);
 
+		//Creamos el nombe del archivo XML
+		String nameFileXML = UUID.randomUUID().toString().concat(".xml");
 
+		// Crea el archivo XML
+		File file = this.createFile(nameFileXML, generatePathResult(String.valueOf(multiplicador)));
 
-		// Crea los archivo xml
-		File file = this.createFile(generatePathResult(),
-						UUID.randomUUID().toString().concat(".xml"));
-
-		// Escritura
+		// Escribe el archivo XML
 		try {
 			FileWriter w = new FileWriter(file);
 			BufferedWriter bw = new BufferedWriter(w);
@@ -107,24 +125,30 @@ public class Avro {
 			wr.close();
 			bw.close();
 		} catch (IOException e) {
+			logger.error("Fallo la generacion del XML " + nameFileXML);
 		}
 
 	}
 
+//	/**
+//	 * @return
+//	 */
+//	private String generatePathResult() {
+//		return generatePathResult(StringUtils.EMPTY);
+//	}
+
 	/**
 	 * @return
 	 */
-	private String generatePathResult() {
+	private String generatePathResult(String ejecucion) {
+		Calendar cal = Calendar.getInstance();
 		String pathResultXML = UtilProperties.getProperty(RESULT_XML)
-				.concat(String.valueOf(Calendar.YEAR))
-				.concat(String.valueOf(Calendar.MONTH))
-				.concat(String.valueOf(Calendar.DAY_OF_MONTH)
-				.concat(String.valueOf(Calendar.HOUR_OF_DAY)
-				.concat(String.valueOf(Calendar.MINUTE)
-				.concat(String.valueOf(Calendar.MILLISECOND)))));
-
-		System.out.println(pathResultXML);
-		return pathResultXML;
+				.concat(String.valueOf(cal.get(Calendar.YEAR)))
+				.concat(String.valueOf(cal.get(Calendar.MONTH)))
+				.concat(String.valueOf(cal.get(Calendar.DAY_OF_MONTH)))
+				.concat(String.valueOf(cal.get(Calendar.HOUR_OF_DAY)))
+				;
+		return StringUtils.isNotBlank(ejecucion)?pathResultXML.concat(ejecucion).trim():pathResultXML;
 	}
 
 	/**
@@ -167,7 +191,8 @@ public class Avro {
 		// We create a DatumWriter, which converts Java objects into an in-memory serialized format.
 		// The SpecificDatumWriter class is used with generated classes and extracts the schema from the specified generated type.
 		DatumWriter<User> userDatumWriter = new SpecificDatumWriter<User>(User.class);
-		// We create a DataFileWriter, which writes the serialized records, as well as the schema, to the file specified in the dataFileWriter.create call.
+		// We create a DataFileWriter, which writes the serialized records, as well as the schema,
+		// to the file specified in the dataFileWriter.create call.
 		DataFileWriter<User> dataFileWriter = new DataFileWriter<User>(userDatumWriter);
 
 		try {
@@ -181,38 +206,46 @@ public class Avro {
 			dataFileWriter.close();
 		} catch (IOException e) {
 			e.printStackTrace();
+			logger.error("Ocurrio un error durante la serializacion");
 		}
 		terminaProceso("serializing", tiempoInicio);
 	}
 
 	/**
-	 * Crea el File con el nombre recibido
+	 * Crea el File con el nombre recibido en el path recibido
 	 * @return File
 	 */
-	private File createFile(String path, String nameFile) {
+	private File createFile(String nameFile, String path) {
 		String msgError="";
 		if(StringUtils.isBlank(path)){
-			msgError.concat(" ").concat("[El path recibido es blanco o nulo]");
+			msgError.concat(" [El path recibido es blanco o nulo]");
 		}
 		if(StringUtils.isBlank(nameFile)){
-			msgError.concat(" ").concat("[El nameFile recibido es blanco o nulo]");
+			msgError.concat(" [El nameFile recibido es blanco o nulo]");
 		}
 
 		File file = null;
 
 		if(StringUtils.isBlank(msgError)) {
 			File folder = new File(path);
-			if (!folder.exists()) {
-				folder.mkdirs(); // esto crea la carpeta java, independientemente que exista el path completo, si no existe crea toda la ruta necesaria
+			if (!folder.exists()) { // Se crea la carpeta, independientemente que exista el path completo,
+				folder.mkdirs();    // si no existe crea toda la ruta necesaria
 			}
 			String absolutePathFile = folder.getPath().concat("\\").concat(nameFile);
-			System.out.println(absolutePathFile);
 
 			file = new File(absolutePathFile);
 		}
 
 		return file;
 	}
+
+//	/**
+//	 * Crea el File con el nombre recibido
+//	 * @return File
+//	 */
+//	private File createFile(String nameFile) {
+//		return createFile(UtilProperties.getProperty(PATH_AVRO), nameFile);
+//	}
 
 	/**
 	 * Crea el File
@@ -227,13 +260,15 @@ public class Avro {
 	 */
 	private List<User> deserializing() {
 		long tiempoInicio = System.currentTimeMillis();
-		// We create a SpecificDatumReader, analogous to the SpecificDatumWriter we used in serialization, which converts in-memory serialized items into instances of our generated class, in this case User.
+		// We create a SpecificDatumReader, analogous to the SpecificDatumWriter we used in serialization,
+		// which converts in-memory serialized items into instances of our generated class, in this case User.
 		DatumReader<User> userDatumReader = new SpecificDatumReader<User>(User.class);
 
 		//Creamos la lista de retorno
 		List<User> listUser = new ArrayList<User>();
 
-		// We pass the DatumReader and the previously created File to a DataFileReader, analogous to the DataFileWriter, which reads the data file on disk.
+		// We pass the DatumReader and the previously created File to a DataFileReader, analogous to the DataFileWriter,
+		// which reads the data file on disk.
 		try {
 			File file = createFile();
 			@SuppressWarnings("resource")
@@ -253,6 +288,7 @@ public class Avro {
 			dataFileReader=null;
 		} catch (IOException e) {
 			e.printStackTrace();
+			logger.error("Ocurrio un error durante la deserializacion");
 		}
 		terminaProceso("deserializing", tiempoInicio);
 
@@ -266,7 +302,7 @@ public class Avro {
 	 */
 	private void terminaProceso(String nameProcess, long tiempoInicio) {
 		long totalTiempo = System.currentTimeMillis() - tiempoInicio;
-		System.out.println("El tiempo del proceso " + nameProcess + " es :" + totalTiempo + " miliseg");
+		logger.info("El tiempo del proceso " + nameProcess + " es : [" + totalTiempo + " miliseg.]");
 	}
 
 }

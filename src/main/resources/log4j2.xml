@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+	<Properties>
+		<Property name="filename">output.log</Property>
+	</Properties>
+	<ThresholdFilter level="trace" />
+
+	<Appenders>
+		<Console name="Console" target="SYSTEM_OUT">
+			<PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n" />
+		</Console>
+		<File name="File1" fileName="${filename}" bufferedIO="false" immediateFlush="true"
+			advertiseURI="file://C:/ws/avro/avro-example2/build/output.log"
+			advertise="true">
+			<PatternLayout>
+				<pattern>%d %p %C{1.} [%t] %m%n</pattern>
+			</PatternLayout>
+		</File>
+	</Appenders>
+	<Loggers>
+		<Logger name="mx.com.extend" level="trace" additivity="false">
+			<AppenderRef ref="Console" />
+		</Logger>
+		<Root level="error">
+			<AppenderRef ref="Console" />
+		</Root>
+	</Loggers>
+</Configuration>
