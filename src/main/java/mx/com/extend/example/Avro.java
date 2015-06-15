@@ -36,14 +36,15 @@ public class Avro {
 	private static Logger logger = LogManager.getLogger(Avro.class);
 
 	/** Constante para cargar el path configurado */
-	private static final String PATH_AVRO = "pathAvro";
+//	private static final String PATH_AVRO = "pathAvro";
 	/** Constante para cargar el namefile configurado */
 	private static final String NAME_FILE_AVRO = "nameFileAvro";
 	/** Constante para cargar el path configurado para los XMLs */
 	private static final String RESULT_XML = "pathResultXML";
 
+	/** Limite */
+	private static int limit = 1000000;
 	/** Multiplicador */
-	private static int limit = 100000;
 	private static int multiplicador = 10;
 
 	/**
@@ -67,37 +68,53 @@ public class Avro {
 	 */
 	private void execute(List<User> listUsers) {
 
-		logger.info("Iniciando la ejecucion con [" + listUsers.size() + "] Users.");
+		// Engordamos la lista
+		this.growList(listUsers);
 
+		logger.info("Iniciando la ejecucion con [" + listUsers.size() + "] Users.");
 		long tiempoInicio = System.currentTimeMillis();
 
-		// Engordamos la lista
-		do {
-			listUsers.addAll(this.generateUsers());
-			--multiplicador;
-		} while (multiplicador>0);
-
 		// Serializamos los usuarios
-		this.serializing(listUsers);
+		this.serializing(listUsers, multiplicador);
 
 		// Deserializamos los usuarios
 		List<User> listUsersDeserializated = this.deserializing();
-
-		// Se itera la lista de Users deserializados
-		for (User user2 : listUsersDeserializated) {
-			logger.debug(user2);
-			this.generaXML(user2, multiplicador); //Genera el XML del User
+		if(logger.isDebugEnabled()) {
+			logger.debug("Se deserializaron [" + listUsersDeserializated.size() + "] registros.");
 		}
 
-		terminaProceso("execute", tiempoInicio);
-
+		// Se itera la lista de Users deserializados
+		long tiempoInicioXML = System.currentTimeMillis();
+		for (User user2 : listUsersDeserializated) {
+//			if(logger.isDebugEnabled()) {
+//				logger.debug(user2);
+//			}
+			this.generaXML(user2, multiplicador); //Genera el XML del User
+		}
+		System.out.println();
+		this.terminaProceso("generaXML", tiempoInicioXML);
+		this.terminaProceso("execute", tiempoInicio);
 		logger.info("Terminada la ejecucion con [" + listUsers.size() + "] Users.");
 
 		// Si el multiplicador no ha alcanzado el limite definido se incrementa en 10 y se repite la ejecucion
 		if(multiplicador<limit) {
 			multiplicador = multiplicador*10;
-			execute(listUsers);
+			if(logger.isDebugEnabled()) {
+				logger.debug("Repitiendo la ejecucion con multiplicador [" + multiplicador + "]");
+			}
+			this.execute(listUsers);
 		}
+	}
+
+	/**
+	 * @param listUsers
+	 */
+	private void growList(List<User> listUsers) {
+		int contador = multiplicador;
+		do {
+			listUsers.addAll(this.generateUsers());
+			--contador;
+		} while (contador>0);
 	}
 
 	/**
@@ -114,13 +131,15 @@ public class Avro {
 		String nameFileXML = UUID.randomUUID().toString().concat(".xml");
 
 		// Crea el archivo XML
-		File file = this.createFile(nameFileXML, generatePathResult(String.valueOf(multiplicador)));
+		File file = this.createFile(this.generatePathResult("x".concat(String.valueOf(multiplicador))), nameFileXML);
 
 		// Escribe el archivo XML
 		try {
 			FileWriter w = new FileWriter(file);
 			BufferedWriter bw = new BufferedWriter(w);
 			PrintWriter wr = new PrintWriter(bw);
+
+			System.out.print(".");
 			wr.write(xml);// escribimos en el archivo
 			wr.close();
 			bw.close();
@@ -130,13 +149,6 @@ public class Avro {
 
 	}
 
-//	/**
-//	 * @return
-//	 */
-//	private String generatePathResult() {
-//		return generatePathResult(StringUtils.EMPTY);
-//	}
-
 	/**
 	 * @return
 	 */
@@ -144,9 +156,9 @@ public class Avro {
 		Calendar cal = Calendar.getInstance();
 		String pathResultXML = UtilProperties.getProperty(RESULT_XML)
 				.concat(String.valueOf(cal.get(Calendar.YEAR)))
-				.concat(String.valueOf(cal.get(Calendar.MONTH)))
+				.concat(String.valueOf(cal.get(Calendar.MONTH)+1))
 				.concat(String.valueOf(cal.get(Calendar.DAY_OF_MONTH)))
-				.concat(String.valueOf(cal.get(Calendar.HOUR_OF_DAY)))
+				//.concat(String.valueOf(cal.get(Calendar.HOUR_OF_DAY)))
 				;
 		return StringUtils.isNotBlank(ejecucion)?pathResultXML.concat(ejecucion).trim():pathResultXML;
 	}
@@ -186,7 +198,7 @@ public class Avro {
 	/**
 	 * Serialize our Users to disk.
 	 */
-	private void serializing(List<User> listUsers) {
+	private void serializing(List<User> listUsers, int multiplicador) {
 		long tiempoInicio = System.currentTimeMillis();
 		// We create a DatumWriter, which converts Java objects into an in-memory serialized format.
 		// The SpecificDatumWriter class is used with generated classes and extracts the schema from the specified generated type.
@@ -196,7 +208,7 @@ public class Avro {
 		DataFileWriter<User> dataFileWriter = new DataFileWriter<User>(userDatumWriter);
 
 		try {
-			File file = createFile();
+			File file = this.createFile(this.generatePathResult("x".concat(String.valueOf(multiplicador))));
 			dataFileWriter.create(((User) listUsers.get(0)).getSchema(), file);
 			for (User user : listUsers) {
 				// We write our users to the file via calls to the dataFileWriter.append method.
@@ -208,14 +220,14 @@ public class Avro {
 			e.printStackTrace();
 			logger.error("Ocurrio un error durante la serializacion");
 		}
-		terminaProceso("serializing", tiempoInicio);
+		this.terminaProceso("serializing", tiempoInicio);
 	}
 
 	/**
 	 * Crea el File con el nombre recibido en el path recibido
 	 * @return File
 	 */
-	private File createFile(String nameFile, String path) {
+	private File createFile(String path, String nameFile) {
 		String msgError="";
 		if(StringUtils.isBlank(path)){
 			msgError.concat(" [El path recibido es blanco o nulo]");
@@ -239,21 +251,21 @@ public class Avro {
 		return file;
 	}
 
-//	/**
-//	 * Crea el File con el nombre recibido
-//	 * @return File
-//	 */
-//	private File createFile(String nameFile) {
-//		return createFile(UtilProperties.getProperty(PATH_AVRO), nameFile);
-//	}
-
 	/**
-	 * Crea el File
+	 * Crea el File con el nombre recibido
 	 * @return File
 	 */
-	private File createFile() {
-		return createFile(UtilProperties.getProperty(PATH_AVRO), UtilProperties.getProperty(NAME_FILE_AVRO));
+	private File createFile(String path) {
+		return this.createFile(path, UtilProperties.getProperty(NAME_FILE_AVRO));
 	}
+
+//	/**
+//	 * Crea el File
+//	 * @return File
+//	 */
+//	private File createFile() {
+//		return this.createFile(UtilProperties.getProperty(NAME_FILE_AVRO), UtilProperties.getProperty(PATH_AVRO));
+//	}
 
 	/**
 	 * Deserialize Users from disk
@@ -270,7 +282,7 @@ public class Avro {
 		// We pass the DatumReader and the previously created File to a DataFileReader, analogous to the DataFileWriter,
 		// which reads the data file on disk.
 		try {
-			File file = createFile();
+			File file = this.createFile(this.generatePathResult("x".concat(String.valueOf(multiplicador))));
 			@SuppressWarnings("resource")
 			DataFileReader<User> dataFileReader = new DataFileReader<User>(file, userDatumReader);
 
@@ -290,7 +302,7 @@ public class Avro {
 			e.printStackTrace();
 			logger.error("Ocurrio un error durante la deserializacion");
 		}
-		terminaProceso("deserializing", tiempoInicio);
+		this.terminaProceso("deserializing", tiempoInicio);
 
 		//retornamos la lista de objetos user
 		return listUser;
